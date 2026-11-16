@@ -15,7 +15,7 @@ function MainContent() {
       .then(data => setPlan(data.data));
   }, []);
 
-  if (!plan) return <h1>Нет данных</h1>;
+  if (!plan) return <h1>Загрузка...</h1>;
   
   return (
     <div>
