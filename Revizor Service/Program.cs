@@ -280,18 +280,21 @@ app.MapGet("/users/me", async (AppDbContext db, HttpContext httpContext, ClaimsP
     };
 
     var json = JsonSerializer.Serialize(userInfo);
-    var base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
+    var base64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(json))
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .Replace("=", "");
 
     httpContext.Response.Cookies.Append("userInfo", base64, new CookieOptions
     {
         HttpOnly = false,
-        Secure = true,
+        Secure = false,
         SameSite = SameSiteMode.Strict,
         Expires = DateTime.UtcNow.AddDays(7),
         Path="/"
     });
 
-    return Results.NoContent();
+    return Results.Ok(new {userInfo, base64});
 })
 .RequireAuthorization(policy => policy.RequireRole("admin","revizor"))
 .WithTags("service");
@@ -421,7 +424,7 @@ app.MapDelete("/plan/{planId}", async (AppDbContext db, Guid planId) =>
 app.MapGet("/plan/current", async (AppDbContext db, ClaimsPrincipal claims ) =>
 {
     var currentPlan = await db.Plans.FirstOrDefaultAsync(p=>p.IsArchived==false);
-    if (currentPlan == null) return Results.NotFound(ApiResponses.Fail("current plan not found",ExceptionCode.NotFound));
+    if (currentPlan == null) return Results.Ok(ApiResponses.Ok("current plan is empty"));
 
     var success = Guid.TryParse(claims.FindFirstValue(ClaimTypes.NameIdentifier),out Guid userId);
     if (!success) return Results.Unauthorized();
