@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Revizor_Service.DTO;
 
 namespace Revizor_Service.Database.Models;

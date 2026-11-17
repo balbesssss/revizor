@@ -27,13 +27,12 @@ public class Plan
     public Plan
     (
         string name,
-        DateTime createdAt,
         Guid createdBy,
         DateOnly periodStart,
         DateOnly? periodEnd = null
     )
     {
-        Name = name; CreatedAt = createdAt; CreatedById = createdBy;
+        Name = name; CreatedAt = DateTime.UtcNow; CreatedById = createdBy;
         PeriodStart = periodStart;
         if ( periodEnd == null ) PeriodEnd = periodStart.AddMonths(1);
         else { PeriodEnd = periodEnd; }
