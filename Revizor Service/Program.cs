@@ -12,6 +12,8 @@ using Revizor_Service.Responses;
 using Revizor_Service.Services;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using System.Security.Cryptography;
+using Revizor_Service.Extension;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -66,6 +68,8 @@ builder.Services.AddCors(options =>
               .WithExposedHeaders("Content-Disposition");
     });
 });
+builder.Services.AddValidation();
+
 var app = builder.Build();
 app.UseExceptionHandler(errorApp =>
 {
@@ -87,11 +91,12 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/roles", async (AppDbContext db) => Results.Ok(ApiResponses<IEnumerable<Role>>.Ok(await db.Roles.ToArrayAsync(), new Pagination{}))).WithTags("Role");
+
+app.MapGet("/roles", async (AppDbContext db) => Results.Ok(ApiResponses<IEnumerable<Role>>.Ok(await db.Roles.AsNoTracking().ToArrayAsync()))).WithTags("Role");
 
 app.MapPost("/roles/", async (AppDbContext db, CreateRole dto) =>
 {
-    await db.Roles.AddAsync(new Role {Name=dto.Name.ToLower()});
+    await db.Roles.AddAsync(new Role (dto.Name.ToLower()));
     await db.SaveChangesAsync();
     return Results.Ok(ApiResponses.Ok("Role is created"));
 })
@@ -104,14 +109,14 @@ app.MapDelete("/roles/{roleId}", async (AppDbContext db, int roleId) =>
     if (role == null) return Results.NotFound(ApiResponses.Fail("Role not found", ExceptionCode.DoesNotExists));
     db.Roles.Remove(role);
     await db.SaveChangesAsync();
-    return Results.Ok(ApiResponses.Ok("Role is delete"));
+    return Results.NoContent();
 })
 .RequireAuthorization("admin")
 .WithTags("Role");
 
 app.MapGet("/roles/{roleId}", async (AppDbContext db, int roleId) =>
 {
-    var role = await db.Roles.FirstOrDefaultAsync(r=> r.Id==roleId);
+    var role = await db.Roles.AsNoTracking().FirstOrDefaultAsync(r=> r.Id==roleId);
     return role != null ? Results.Ok(ApiResponses<Role>.Ok(data: role)) : Results.NotFound(ApiResponses.Fail("Role does not exists", ExceptionCode.DoesNotExists));
 })
 .RequireAuthorization("admin")
@@ -121,9 +126,9 @@ app.MapPatch("/roles/{roleId}",async (AppDbContext db, int roleId, PatchRole dto
 {
     var role = await db.Roles.FirstOrDefaultAsync(r=> r.Id == roleId);
     if (role == null) {return Results.NotFound(ApiResponses.Fail("Role does not exists", ExceptionCode.DoesNotExists));}
-    if (dto.Name != null) role.Name=dto.Name; 
+    role.SetFields(dto);
     await db.SaveChangesAsync();
-    return Results.Ok(ApiResponses.Ok("Role is edit"));
+    return Results.NoContent();
 })
 .RequireAuthorization("admin")
 .WithTags("Role");
@@ -132,6 +137,7 @@ app.MapGet("/users", async (AppDbContext db) =>
 {
     var users = await db.Users
     .Include(u=> u.Role)
+    .AsNoTracking()
     .Select(u=> new UserResponse
     {
         Id = u.Id,
@@ -146,10 +152,11 @@ app.MapGet("/users", async (AppDbContext db) =>
 
 app.MapPost("/users/", async (IPasswordHasher<CreateUser> hasher,AppDbContext db, CreateUser dto) =>
 {
-    dto.Password = hasher.HashPassword(dto, dto.Password);
-    await db.Users.AddAsync(new User {FirstName = dto.FirstName,SecondName=dto.SecondName,LastName=dto.LastName, Password = dto.Password, RoleId = dto.RoleId });
+    var user = new User (dto.FirstName,dto.SecondName,dto.LastName,dto.RoleId);
+    user.SetPassword(hasher.HashPassword(dto, dto.Password));
+    db.Users.Add(user);
     await db.SaveChangesAsync();
-    return Results.Ok(ApiResponses.Ok("User is created"));
+    return Results.Created($"/users/{user.Id}", ApiResponses.Ok("User is created"));
 })
 .RequireAuthorization("admin")
 .WithTags("User");
@@ -158,9 +165,9 @@ app.MapDelete("/users/{userId}", async (AppDbContext db, Guid userId) =>
 {
     var user = await db.Users.FirstOrDefaultAsync(u=> u.Id == userId);
     if (user==null) {return Results.NotFound(ApiResponses.Fail("User not found", ExceptionCode.DoesNotExists));}
-    user.IsActive = false;
+    user.DeleteUser();
     await db.SaveChangesAsync();
-    return Results.Ok(ApiResponses.Ok("User is delete"));
+    return Results.NoContent();
 })
 .RequireAuthorization("admin")
 .WithTags("User");
@@ -168,6 +175,7 @@ app.MapDelete("/users/{userId}", async (AppDbContext db, Guid userId) =>
 app.MapGet("/users/{userId}", async (AppDbContext db, Guid userId) =>
 {
     var user = await db.Users
+        .AsNoTracking()
         .Include(u=> u.Role)
         .FirstOrDefaultAsync(u=> u.Id == userId);
     return user != null ? Results.Ok(ApiResponses<UserResponse>.Ok(new ()
@@ -185,14 +193,9 @@ app.MapPatch("/users/{userId}",async (AppDbContext db, Guid userId, PatchUser dt
 {
     var user = await db.Users.FirstOrDefaultAsync(u=> u.Id == userId);
     if (user == null) { return Results.NotFound(ApiResponses.Fail("User does not exists", ExceptionCode.DoesNotExists));}
-
-    if (dto.FirstName != null) user.FirstName=dto.FirstName;
-    if (dto.SecondName != null) user.SecondName=dto.SecondName;
-    if (dto.LastName != null) user.LastName=dto.LastName;
-    if (dto.RoleId != null) user.RoleId = (int)dto.RoleId;
-
+    user.SetFields(dto);
     await db.SaveChangesAsync();
-    return Results.Ok(ApiResponses.Ok("User is edit"));
+    return Results.NoContent();
 })
 .RequireAuthorization("admin")
 .WithTags("User");
@@ -210,19 +213,17 @@ app.MapPost("/login", async (AppDbContext db, IPasswordHasher<User> hasher, ICon
     {
         return Results.Unauthorized();
     }
-    user.RefreshToken = RefreshToken.GenerateRefreshToken();
-    user.RefreshExpireTime = DateTime.UtcNow.AddDays(7);
+    user.UpdateRefreshData(RefreshToken.GenerateRefreshToken(),DateTime.UtcNow.AddDays(7));
 
     await db.SaveChangesAsync();
     
-    httpContext.Response.Cookies.Append("refreshToken", user.RefreshToken,new CookieOptions
+    httpContext.Response.Cookies.Append("refreshToken", user.RefreshToken! ,new CookieOptions
     {
         HttpOnly=true,
         Secure=true,
         SameSite=SameSiteMode.Strict,
         Expires=DateTime.UtcNow.AddDays(7)
     });
-
 
     return Results.Ok(
         ApiResponses<Token>.Ok(
@@ -234,35 +235,38 @@ app.MapPost("/login", async (AppDbContext db, IPasswordHasher<User> hasher, ICon
 })
 .WithTags("service");
 
-app.MapPost("/refresh", async (AppDbContext db, HttpContext httpContext, IConfiguration cfg) =>
+app.MapPost("/refresh", async (AppDbContext db, HttpContext http, IConfiguration cfg, CancellationToken ct) =>
 {
-    var refreshToken = httpContext.Request.Cookies["refreshToken"];
-    if (refreshToken == null)
-    {
-        return Results.NotFound(ApiResponses.Fail("Cookie not found", ExceptionCode.NotFound));
-    }
-    var user = await db.Users.Include(u => u.Role).FirstOrDefaultAsync(u=> u.RefreshToken == refreshToken);
-    if (user == null)
-    {
-        return Results.NotFound(ApiResponses.Fail("user not found", ExceptionCode.NotFound));
-    }
-    user.RefreshToken = RefreshToken.GenerateRefreshToken();
-    user.RefreshExpireTime = DateTime.UtcNow.AddDays(7);
-    await db.SaveChangesAsync();
+    var refreshToken = http.Request.Cookies["refreshToken"];
+    if (refreshToken == null) return Results.Unauthorized();
+    
+    var refreshHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(refreshToken)));
+    
+    var user = await db.Users
+        .Include(u=>u.Role)
+        .FirstOrDefaultAsync(u=> u.RefreshToken == refreshHash, ct);
+    if (user==null) return Results.Unauthorized();
 
-    httpContext.Response.Cookies.Append("refreshToken", user.RefreshToken , new CookieOptions
+    if (user.RefreshExpireTime is null || user.RefreshExpireTime < DateTime.UtcNow) 
     {
-        HttpOnly=true,
-        Secure=true,
-        SameSite=SameSiteMode.Strict,
-        Expires=DateTime.UtcNow.AddDays(7), 
-        Path="/"
-    });
-    return Results.Ok(ApiResponses<Token>.Ok(new () {AccessToken=JWT.GenToken(user, cfg)}));
+        user.RevokeRefresh();
+        await db.SaveChangesAsync(ct);
+        return Results.Unauthorized();
+    }
+
+    var newRefresh = RefreshToken.GenerateRefreshToken();
+    var newRefreshHash =  Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(newRefresh)));
+
+    user.UpdateRefreshData(newRefreshHash, DateTime.UtcNow.AddDays(7));
+
+    await db.SaveChangesAsync(ct);
+
+    http.AppendCookiesInfo("refreshToken", newRefresh , (DateTime)user.RefreshExpireTime);
+    return Results.Ok(new { accessToken = JWT.GenToken(user, cfg)});
 })
 .WithTags("service");
 
-app.MapGet("/users/me", async (AppDbContext db, HttpContext httpContext, ClaimsPrincipal claims) =>
+app.MapGet("/users/me", async (AppDbContext db, HttpContext http, ClaimsPrincipal claims) =>
 {
     var success = Guid.TryParse(claims.FindFirstValue(ClaimTypes.NameIdentifier), out Guid userId);
     if (!success) return Results.Unauthorized();
@@ -285,16 +289,9 @@ app.MapGet("/users/me", async (AppDbContext db, HttpContext httpContext, ClaimsP
             .Replace('/', '_')
             .Replace("=", "");
 
-    httpContext.Response.Cookies.Append("userInfo", base64, new CookieOptions
-    {
-        HttpOnly = false,
-        Secure = false,
-        SameSite = SameSiteMode.Strict,
-        Expires = DateTime.UtcNow.AddDays(7),
-        Path="/"
-    });
+    http.AppendCookiesInfo("userInfo", base64 , (DateTime)user.RefreshExpireTime);
 
-    return Results.Ok(new {userInfo, base64});
+    return Results.NoContent();
 })
 .RequireAuthorization(policy => policy.RequireRole("admin","revizor"))
 .WithTags("service");
@@ -307,22 +304,22 @@ app.MapPost("/users/me/change-password/", async (AppDbContext db, ClaimsPrincipa
     var user = await db.Users.FirstOrDefaultAsync(u=> u.Id == userId); 
     if (user == null) return Results.NotFound();
 
-    user.Password = hasher.HashPassword(user, pwd);
+    user.SetPassword(hasher.HashPassword(user, pwd));
     await db.SaveChangesAsync();
-    return Results.Ok(ApiResponses.Ok("Password edit"));
+    return Results.NoContent();
 })
 .RequireAuthorization(policy => policy.RequireRole("admin","revizor"))
 .WithTags("service");
 
-app.MapGet("/facilities", async (AppDbContext db) => Results.Ok(ApiResponses<IEnumerable<Facility>>.Ok(await db.Facilities.ToArrayAsync())))
+app.MapGet("/facilities", async (AppDbContext db) => Results.Ok(ApiResponses<IEnumerable<Facility>>.Ok(await db.Facilities.AsNoTracking().ToArrayAsync())))
 .RequireAuthorization("Admin")
 .WithTags("Facility");
 
 app.MapPost("/facilities/", async (AppDbContext db, CreateFacility dto) =>
 {
-    await db.Facilities.AddAsync(new Facility{Title = dto.Title, Location = dto.Location});
+    await db.Facilities.AddAsync(new Facility (dto.Title,dto.Location));
     await db.SaveChangesAsync();
-    return Results.Ok(ApiResponses.Ok("Facility is created"));
+    return Results.Created("/facilities/",ApiResponses.Ok("Facility is created"));
 })
 .RequireAuthorization("admin")
 .WithTags("Facility");
@@ -333,14 +330,14 @@ app.MapDelete("/facilities/{facilityId}", async (AppDbContext db, Guid facilityI
     if (facility == null) return Results.NotFound(ApiResponses.Fail("Facility not found", ExceptionCode.DoesNotExists));
     db.Facilities.Remove(facility);
     await db.SaveChangesAsync();
-    return Results.Ok(ApiResponses.Ok("Facility is delete"));
+    return Results.NoContent();
 })
 .RequireAuthorization("admin")
 .WithTags("Facility");
 
 app.MapGet("/facilities/{facilityId}", async (AppDbContext db, Guid facilityId) =>
 {
-    var facility = await db.Facilities.FirstOrDefaultAsync(f=> f.Id==facilityId);
+    var facility = await db.Facilities.AsNoTracking().FirstOrDefaultAsync(f=> f.Id==facilityId);
     if (facility == null) return Results.NotFound(ApiResponses.Fail("Facility does not exists", ExceptionCode.DoesNotExists));
     return Results.Ok(ApiResponses<Facility>.Ok(data: facility));
 })
@@ -351,22 +348,20 @@ app.MapPatch("/facilities/{facilityId}",async (AppDbContext db, Guid facilityId,
 {
     var facility = await db.Facilities.FirstOrDefaultAsync(f=> f.Id == facilityId);
     if (facility == null) return Results.NotFound(ApiResponses.Fail("Facility does not exists", ExceptionCode.DoesNotExists));
-
-    if (dto.Title != null) facility.Title = dto.Title;
-    if (dto.Location != null) facility.Location = dto.Location;
+    facility.SetFields(dto);
     await db.SaveChangesAsync();
     return Results.NoContent();
 })
 .RequireAuthorization("admin")
 .WithTags("Facility");
 
-app.MapGet("/plan", async (AppDbContext db) => Results.Ok(ApiResponses<IEnumerable<Plan>>.Ok(await db.Plans.ToArrayAsync())))
+app.MapGet("/plan", async (AppDbContext db) => Results.Ok(ApiResponses<IEnumerable<Plan>>.Ok(await db.Plans.AsNoTracking().ToArrayAsync())))
 .RequireAuthorization("admin")
 .WithTags("Plan");
 
 app.MapGet("/plan/{planId}", async (AppDbContext db, Guid planId) =>
 {
-    var plan = await db.Plans.FirstOrDefaultAsync(p=> p.Id == planId);
+    var plan = await db.Plans.AsNoTracking().FirstOrDefaultAsync(p=> p.Id == planId);
     return plan != null? Results.Ok(ApiResponses<Plan>.Ok(plan)) : Results.NotFound(ApiResponses.Fail("plan not found", ExceptionCode.NotFound));
 })
 .RequireAuthorization("admin")
@@ -378,11 +373,11 @@ app.MapPost("/plan/", async (AppDbContext db, ClaimsPrincipal claims, CreatePlan
     if (!success) return  Results.Unauthorized();
     try
     {
-        await db.Plans.AddAsync(new Plan{Name=dto.Name, PeriodStart=dto.PeriodStart, PeriodEnd=dto.PeriodEnd, CreatedById=userId});
+        await db.Plans.AddAsync(new Plan(dto.Name, userId, dto.PeriodStart,dto.PeriodEnd));
         await db.SaveChangesAsync();
         return Results.Created("/plan/",ApiResponses.Ok("Plan is created"));    
     }
-    catch(Exception)
+    catch
     {
         return Results.Conflict(ApiResponses.Fail("invalid format date", ExceptionCode.ValidationError));
     }
@@ -392,17 +387,10 @@ app.MapPost("/plan/", async (AppDbContext db, ClaimsPrincipal claims, CreatePlan
 
 app.MapPatch("/plan/{planId}",async (AppDbContext db, Guid planId,ClaimsPrincipal claims, PatchPlan dto ) =>
 {
-    var success = Guid.TryParse(claims.FindFirstValue(ClaimTypes.NameIdentifier), out Guid userId);
-    if (!success) return Results.Unauthorized();
-
     var plan = await db.Plans.FirstOrDefaultAsync(p=>p.Id==planId);
     if (plan==null) return Results.NotFound(ApiResponses.Fail("plan not found",ExceptionCode.NotFound));
     
-    if (dto.Name != null) plan.Name = dto.Name;
-    if (dto.CreatedAt != null) plan.CreatedAt = (DateTime)dto.CreatedAt;
-    if (dto.CreatedBy != null) plan.CreatedById = (Guid)dto.CreatedBy;
-    if (dto.PeriodStart != null) plan.PeriodStart = (DateOnly)dto.PeriodStart;
-    if (dto.PeriodEnd != null) plan.PeriodEnd = dto.PeriodEnd;
+    plan.SetFields(dto);
 
     await db.SaveChangesAsync();
     return Results.NoContent();
@@ -423,7 +411,7 @@ app.MapDelete("/plan/{planId}", async (AppDbContext db, Guid planId) =>
 
 app.MapGet("/plan/current", async (AppDbContext db, ClaimsPrincipal claims ) =>
 {
-    var currentPlan = await db.Plans.FirstOrDefaultAsync(p=>p.IsArchived==false);
+    var currentPlan = await db.Plans.AsNoTracking().FirstOrDefaultAsync(p=>p.IsArchived==false);
     if (currentPlan == null) return Results.Ok(ApiResponses.Ok("current plan is empty"));
 
     var success = Guid.TryParse(claims.FindFirstValue(ClaimTypes.NameIdentifier),out Guid userId);
@@ -432,33 +420,35 @@ app.MapGet("/plan/current", async (AppDbContext db, ClaimsPrincipal claims ) =>
     if (claims.FindFirstValue(ClaimTypes.Role) == "admin")
     {
         var assigments = await db.PlanAssigments
+            .AsNoTracking()
             .Where(r=> r.PlanId == currentPlan.Id)
             .Include(r=> r.Facility)
             .Include(r=> r.PassBy)
             .Include(r=> r.ResponsiblePerson)
             .ToListAsync();
-        var results = assigments.GroupBy(a=> a.Facility).Select(g=> new ResultAssigmentForAdmin
+        var results = assigments.GroupBy(a=> a.Facility).Select(g=> new AssigmentItem
         {
             Id = g.Select(p=> p.Id).First(),
             FacilityId = g.Key.Id,
             FacilityTitle = g.Key.Title,
             FacilityLocation = g.Key.Location,
             PassAt = g.Select(u=> u.PassAt).FirstOrDefault(),
-            Revizors = g.Select(u=> new Revizor {
+            Revizors = g.Select(u=> new UserShort {
                 Id = u.PassById,
-                FullName = u.PassBy.GetFullName(),
+                FullName = u.PassBy!.GetFullName(),
                 }).ToList(),
-            ResponsiblePerson = g.Select(r => new ResponsiblePerson
+            ResponsiblePerson = g.Select(r => new UserShort
             {
-                Id = (Guid)r.ResponsiblePersonId,
-                FullName = r.ResponsiblePerson.GetFullName()
+                Id = (Guid)r.ResponsiblePersonId!,
+                FullName = r.ResponsiblePerson!.GetFullName()
             }).FirstOrDefault(),
         }).ToList();
-        return Results.Ok(ApiResponses<DataResultAssigments>.Ok(new () {NamePlan = currentPlan.Name, Assigments=results}));
+        return Results.Ok(ApiResponses<DataCurrentPlanOfAssigment>.Ok(new () {NamePlan = currentPlan.Name, Assigments=results}));
     }
     if (claims.FindFirstValue(ClaimTypes.Role) == "revizor")
     {
         var assigments = await db.PlanAssigments
+            .AsNoTracking()
             .Where(r=> r.PlanId == currentPlan.Id)
             .Where(r=> r.PassById == userId)
             .Include(r=> r.Facility)
@@ -477,38 +467,39 @@ app.MapPost("/plan/archived", async (AppDbContext db) =>
 {
     var plan = await db.Plans.FirstOrDefaultAsync(p=> p.IsArchived == false);
     if (plan == null) return Results.NotFound(ApiResponses.Fail("plan not found",ExceptionCode.NotFound));
-    plan.IsArchived=true;
+    plan.Archived();
     await db.SaveChangesAsync();
-    return Results.Ok(ApiResponses.Ok("Plan is arcived"));
+    return Results.NoContent();
 })
-.RequireAuthorization(policy => policy.RequireRole("admin"))
+.RequireAuthorization("admin")
 .WithTags("Plan");
 
 app.MapGet("/plan-assigment/{planId}" , async (AppDbContext db, Guid planId) =>
 {
     var assigments = await db.PlanAssigments
+        .AsNoTracking()
         .Where(p=> p.PlanId == planId)
         .Include(p=> p.PassBy)
         .Include(p=> p.ResponsiblePerson)
         .Include(p=> p.Facility)
         .ToArrayAsync();
     var result = assigments.GroupBy(p=> p.Facility)
-        .Select(r=> new ResultPlanAssigment
+        .Select(r=> new DataPlanOfAssigment
         {
             Facility = $"{r.Key.Title} {r.Key.Location}",
             PassAt = r.Select(p=> p.PassAt).First(),
-            Revizors = r.Select(r=> new Revizor
+            Revizors = r.Select(r=> new UserShort
             {
                 Id = r.PassById,
-                FullName = r.PassBy.GetFullName()
-            }).ToArray(),
-            ResponsiblePerson = r.Select(p=> new Revizor
+                FullName = r.PassBy!.GetFullName()
+            }).ToList(),
+            ResponsiblePerson = r.Select(p=> new UserShort
             {
-                Id = (Guid)p.ResponsiblePersonId,
-                FullName = p.ResponsiblePerson.GetFullName()
+                Id = (Guid)p.ResponsiblePersonId!,
+                FullName = p.ResponsiblePerson!.GetFullName()
             }).First()
         }).ToArray();
-    return Results.Ok(ApiResponses<IEnumerable<ResultPlanAssigment>>.Ok(result)) ;
+    return Results.Ok(ApiResponses<IEnumerable<DataPlanOfAssigment>>.Ok(result)) ;
 });
 
 app.MapPost("/plan-assigment/{planId}", async (AppDbContext db,ClaimsPrincipal claims, Guid planId, List<CreateAssigment> dtos) =>
@@ -523,15 +514,16 @@ app.MapPost("/plan-assigment/{planId}", async (AppDbContext db,ClaimsPrincipal c
 
     foreach (var assigment in dtos)
     {
-        await db.PlanAssigments.AddAsync(new () {
-            PlanId = plan.Id,
-            PassById = assigment.PassById,
-            PassAt = assigment.PassAt,
-            FacilityId = assigment.FacilityId,
-            ResponsiblePersonId = assigment.ResponsiblePersonId});
+        db.PlanAssigments.Add(new (
+            plan.Id,
+            assigment.PassById,
+            assigment.PassAt,
+            assigment.FacilityId,
+            assigment.ResponsiblePersonId));
     }
     await db.SaveChangesAsync();
     return Results.Ok(ApiResponses.Ok("Plan Assigments create")); 
+    
 })
 .RequireAuthorization("admin")
 .WithTags("PlanAssigment");
@@ -547,12 +539,13 @@ app.MapPost("/record/", async (AppDbContext db, ClaimsPrincipal claims,CreateRec
     var assigment = await db.PlanAssigments.Where(p=> p.PlanId == currentPlan.Id && p.PassById == userId).FirstOrDefaultAsync();
     if (assigment == null) return Results.NotFound(ApiResponses.Fail("assigment not found",ExceptionCode.NotFound));
 
-    await db.Records.AddAsync(new Record {
-        PlanAssigmentId=assigment.Id,
-        EndAt=dto.EndAt,
-        PassageWay=dto.PassageWay});
+    var record = new Record (
+        assigment.Id,
+        dto.EndAt,
+        dto.PassageWay);
+    db.Records.Add(record);
     await db.SaveChangesAsync();
-    return Results.Ok(ApiResponses.Ok("record add"));
+    return Results.Created($"/record/{record.Id}",ApiResponses.Ok("record add"));
 })
 .RequireAuthorization(policy => policy.RequireRole("admin","revizor"))
 .WithTags("Record");
@@ -565,19 +558,18 @@ app.MapPatch("/record/{recordId}", async (AppDbContext db, ClaimsPrincipal claim
     var record = await db.Records.FirstOrDefaultAsync(r=> r.Id == recordId);
     if (record == null) return Results.NotFound(ApiResponses.Fail("record not found",ExceptionCode.NotFound));
 
-    if (dto.EndAt != null) record.EndAt = (TimeOnly)dto.EndAt;
-    if (dto.PassageWay != null) record.PassageWay = (float)dto.PassageWay;
+    record.SetFields(dto);
 
     await db.SaveChangesAsync();
-    return Results.Ok(ApiResponses.Ok("record is edit"));
+    return Results.NoContent();
 })
 .RequireAuthorization(policy => policy.RequireRole("admin","revizor"))
 .WithTags("Record");
 
-app.MapGet("/generate-reports/{planId}", async (AppDbContext db,ReportsServices reportsServices, ClaimsPrincipal claims, Guid planId) =>
+app.MapGet("/reports/{planId}/generate", async (AppDbContext db,ReportsServices reportsServices, ClaimsPrincipal claims, Guid planId) =>
 {
     var succes = Guid.TryParse(claims.FindFirstValue(ClaimTypes.NameIdentifier), out Guid userId);
-    var user = await db.Users.FirstOrDefaultAsync(u=> u.Id==userId);
+    var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u=> u.Id==userId);
     if (user == null) return Results.Unauthorized();
     var success = await reportsServices.CreateDocumentReportAdmin(planId, user );
     if (success == 0) return Results.BadRequest();
@@ -586,7 +578,7 @@ app.MapGet("/generate-reports/{planId}", async (AppDbContext db,ReportsServices 
 .RequireAuthorization("admin")
 .WithTags("Report");
 
-app.MapGet("/get-reports/my", async (AppDbContext db, Guid reportId, ClaimsPrincipal claims) =>
+app.MapGet("/reports/my", async (AppDbContext db, Guid reportId, ClaimsPrincipal claims) =>
 {
     var success = Guid.TryParse(claims.FindFirstValue(ClaimTypes.NameIdentifier), out Guid userId);
     if (!success) return Results.Unauthorized();
@@ -596,30 +588,30 @@ app.MapGet("/get-reports/my", async (AppDbContext db, Guid reportId, ClaimsPrinc
 .RequireAuthorization(policy => policy.RequireRole("admin","revizor"))
 .WithTags("Report");
 
-app.MapGet("/get-reports", async (AppDbContext db) =>
+app.MapGet("/reports", async (AppDbContext db) =>
 {
     var results = await db.Reports
-        .Include(p=> p.Plan)
-        .Select(p=> new FrontReports {
-            PlanId = p.Id,
+        .AsNoTracking()
+        .Select(p=> new DataReportToFront {
+            PlanId = p.Plan!.Id,
             Name = p.Plan.Name,
             PeriodStart = p.Plan.PeriodStart,
             PeriodEnd = (DateOnly)p.Plan.PeriodEnd!,
             }).ToArrayAsync();
-    return Results.Ok(ApiResponses<IEnumerable<FrontReports>>.Ok(results));
+    return Results.Ok(ApiResponses<IEnumerable<DataReportToFront>>.Ok(results));
 })
 .RequireAuthorization("admin")
 .WithTags("Report");
 
-app.MapGet("/get-reports/{planId}" , async (AppDbContext db, ReportsServices reportsServices, Guid planId) =>
+app.MapGet("/reports/{planId}" , async (AppDbContext db, ReportsServices reportsServices, Guid planId) =>
 { 
-    var result = await  reportsServices.GetRecordsByPlan(planId);
-    return Results.Ok(ApiResponses<IEnumerable<ResultReportForId>>.Ok(result));
+    var result = await reportsServices.GetRecordsByPlan(planId);
+    return Results.Ok(ApiResponses<IEnumerable<DataReportWithRecords>>.Ok(result));
 })
 .RequireAuthorization("admin")
 .WithTags("Report");
 
-app.MapGet("/download-report/{reportId}", async (AppDbContext db, IConfiguration cfg, ReportsServices reportsServices,ClaimsPrincipal claims ,Guid reportId) =>
+app.MapGet("/reports/{reportId}/download", async (AppDbContext db, IConfiguration cfg, ReportsServices reportsServices,ClaimsPrincipal claims ,Guid reportId) =>
 {
     var success = Guid.TryParse(claims.FindFirstValue(ClaimTypes.NameIdentifier), out Guid userId);
     if (!success) return Results.Unauthorized();
