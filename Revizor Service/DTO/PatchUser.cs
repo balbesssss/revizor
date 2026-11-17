@@ -1,12 +1,18 @@
-using System;
-using Revizor_Service.Database.Models;
+using System.ComponentModel.DataAnnotations;
 
 namespace Revizor_Service.DTO;
 
-public class PatchUser
-{
-    public string? FirstName { get; set;}
-    public string? SecondName { get; set;}
-    public string? LastName { get; set;}
-    public int? RoleId {get;set;} 
-}
+public record PatchUser
+(
+    [StringLength(40, MinimumLength = 3)]
+    string? FirstName = null,
+    
+    [StringLength(40, MinimumLength = 3)]
+    string? SecondName = null,
+    
+    [StringLength(40, MinimumLength = 3)]
+    string? LastName = null,
+    
+    [Range(0, int.MaxValue)]
+    int? RoleId = null
+);

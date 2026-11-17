@@ -1,10 +1,13 @@
-using System;
+using System.ComponentModel.DataAnnotations;
 
 namespace Revizor_Service.DTO;
 
-public class CreatePlan
-{
-    public string Name {get;set;}
-    public DateOnly PeriodStart {get;set;}
-    public DateOnly? PeriodEnd {get;set;}
-}
+public record CreatePlan
+( 
+    [StringLength(50, MinimumLength = 10)]
+    string Name,
+
+    DateOnly PeriodStart,
+    
+    DateOnly? PeriodEnd
+);

@@ -1,9 +1,12 @@
-using System;
+using System.ComponentModel.DataAnnotations;
 
 namespace Revizor_Service.DTO;
 
-public class CreateFacility
-{
-    public string Title {get;set;}
-    public string Location {get;set;}
-}
+public record CreateFacility
+(
+    [Required, StringLength(100, MinimumLength = 3)]
+    string Title,
+
+    [Required, StringLength(150, MinimumLength = 10)]
+    string Location
+);

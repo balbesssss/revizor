@@ -1,13 +1,21 @@
-using System;
-using Revizor_Service.Database.Models;
+using System.ComponentModel.DataAnnotations;
 
 namespace Revizor_Service.DTO;
 
-public class CreateUser
-{
-    public string FirstName { get; set;}
-    public string SecondName { get; set;}
-    public string LastName { get; set;}
-    public int RoleId {get;set;} 
-    public string Password {get;set;} 
-}
+public record CreateUser
+(
+    [StringLength(40, MinimumLength = 3)]
+    string FirstName,
+    
+    [StringLength(40, MinimumLength = 3)]
+    string SecondName,
+    
+    [StringLength(40, MinimumLength = 3)]
+    string LastName,
+    
+    [Range(0, int.MaxValue)]
+    int RoleId, 
+
+    [RegularExpression(@"^[a-zA-Z0-9а-яА-ЯёЁ _\-\.()]{8,30}\z")]
+    string Password 
+);

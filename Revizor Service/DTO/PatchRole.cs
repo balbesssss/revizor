@@ -1,8 +1,9 @@
-using System;
+using System.ComponentModel.DataAnnotations;
 
 namespace Revizor_Service.DTO;
 
-public class PatchRole
-{
-    public string? Name { get; set; } = null;
-}
+public record PatchRole
+(
+    [Required, StringLength(40, MinimumLength = 5)]
+    string Name
+);
