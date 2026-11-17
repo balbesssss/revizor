@@ -1,4 +1,3 @@
-using System;
 using System.Security.Cryptography;
 
 namespace Revizor_Service.Services;
@@ -13,6 +12,6 @@ public class RefreshToken
         return Convert.ToBase64String(randomNumber)
             .Replace('+', '-')
             .Replace('/', '_')
-            .Replace("=", "");;
+            .Replace("=", "");
     }
 }

@@ -2,22 +2,15 @@ using Revizor_Service.Database;
 using ClosedXML.Excel;
 using Revizor_Service.Database.Models;
 using Microsoft.EntityFrameworkCore;
-using Revizor_Service.DTO;
+using Revizor_Service.Responses;
 
 namespace Revizor_Service.Services;
-public class ReportsServices
+public class ReportsServices(IConfiguration cfg, AppDbContext db)
 {
+    private readonly string _folderReports = cfg["folderReports"]!;
+    private readonly AppDbContext _db = db;
 
-    private readonly string _folderReports;
-    private readonly AppDbContext _db;
-
-    public ReportsServices(IConfiguration cfg, AppDbContext db) 
-    {
-        _db = db;
-        _folderReports = cfg["folderReports"]!;
-    }
-
-    public async Task<List<ResultReportForId>> GetRecordsByPlan(Guid planId)
+    public async Task<List<DataReportWithRecords>> GetRecordsByPlan(Guid planId)
     {
         var plan = await _db.Plans.FirstOrDefaultAsync(p=> p.Id == planId);
         if (plan == null) return [];
@@ -35,16 +28,16 @@ public class ReportsServices
         var result = assignments
             .Where(a => records.Any(r => r.PlanAssigmentId == a.Id))
             .GroupBy(a => a.PassBy)
-            .Select(g => new ResultReportForId
+            .Select(g => new DataReportWithRecords
             {
-                Id = g.Key.Id,
+                Id = g.Key!.Id,
                 FullName = g.Key.GetFullName(),
                 Resords = g.Select(a =>
                 {
                     var record = records.FirstOrDefault(r => r.PlanAssigmentId == a.Id);
-                    return new ResultRecordForId
+                    return new RecordItem
                     {
-                        FacilityTitle = a.Facility.Title,
+                        FacilityTitle = a.Facility!.Title,
                         FacilityLocation = a.Facility.Location,
                         StartAt = record != null 
                             ? TimeOnly.FromDateTime(record.PlanAssigment.PassAt) 
@@ -58,8 +51,7 @@ public class ReportsServices
         return result;
     }
     
-    // блядская формула для вычисления ночной смены 
-    public  TimeSpan GetNightHours(TimeOnly start, TimeOnly end)
+    public TimeSpan GetNightHours(TimeOnly start, TimeOnly end)
     {
         var startTs = start.ToTimeSpan();
         var endTs = end.ToTimeSpan();
@@ -119,13 +111,11 @@ public class ReportsServices
             }
         }
         await _db.Reports.AddAsync(new Report
-        {
-            PlanId = planId,
-            UserId = admin.Id,
-            FileName = $"user_{admin.GetFullName()}",
-            FilePath = $"{_folderReports}/Revizor/",
-            CreatedAt = DateTime.UtcNow
-        });
+        (
+            planId, admin.Id,
+            $"user_{admin.GetFullName()}",
+            $"{_folderReports}/Revizor/"
+        ));
         await _db.SaveChangesAsync();
         workbook.SaveAs($"{_folderReports}/Admin/{currentDate.Month}_{currentDate.Year}.xlsx");
         return 1;
