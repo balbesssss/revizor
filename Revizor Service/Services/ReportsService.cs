@@ -10,20 +10,20 @@ public class ReportsServices(IConfiguration cfg, AppDbContext db)
     private readonly string _folderReports = cfg["folderReports"]!;
     private readonly AppDbContext _db = db;
 
-    public async Task<List<DataReportWithRecords>> GetRecordsByPlan(Guid planId)
+    public async Task<List<DataReportWithRecords>> GetRecordsByPlan(Guid planId, CancellationToken ct)
     {
-        var plan = await _db.Plans.FirstOrDefaultAsync(p=> p.Id == planId);
+        var plan = await _db.Plans.FirstOrDefaultAsync(p=> p.Id == planId,ct);
         if (plan == null) return [];
 
         var assignments = await _db.PlanAssigments
             .Where(a => a.PlanId == planId)
             .Include(a => a.PassBy)
             .Include(a => a.Facility)
-            .ToListAsync();
+            .ToListAsync(ct);
 
         var records = await _db.Records
             .Where(r => r.PlanAssigment.PlanId == planId)
-            .ToListAsync();
+            .ToListAsync(ct);
 
         var result = assignments
             .Where(a => records.Any(r => r.PlanAssigmentId == a.Id))
@@ -79,11 +79,11 @@ public class ReportsServices(IConfiguration cfg, AppDbContext db)
         return total;
     }
 
-    public async Task<int> CreateDocumentReportAdmin(Guid planId, User admin)
+    public async Task<int> CreateDocumentReportAdmin(Guid planId, User admin, CancellationToken ct)
     {
         using var workbook = new XLWorkbook();
         var currentDate = DateTime.Now;
-        var records = await GetRecordsByPlan(planId);
+        var records = await GetRecordsByPlan(planId, ct);
         if (records.Count == 0) return 0;
         foreach (var user in records)
         {
@@ -110,13 +110,13 @@ public class ReportsServices(IConfiguration cfg, AppDbContext db)
                 worksheet.Cell($"E{i + 4}").Value = user.Resords[i].PassegeWay;
             }
         }
-        await _db.Reports.AddAsync(new Report
+        _db.Reports.Add(new Report
         (
             planId, admin.Id,
             $"user_{admin.GetFullName()}",
             $"{_folderReports}/Revizor/"
         ));
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(ct);
         workbook.SaveAs($"{_folderReports}/Admin/{currentDate.Month}_{currentDate.Year}.xlsx");
         return 1;
     }   
