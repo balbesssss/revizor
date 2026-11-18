@@ -16,6 +16,7 @@ public static class ServicesBuilder
     public static IServiceCollection RegisterServices (this WebApplicationBuilder builder)
     {
         var web = builder.Services;
+        
         web.AddOpenApi();
         web.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(builder.Configuration.GetConnectionString("revizor")));
         web.AddSwaggerGen(opt =>
@@ -68,6 +69,7 @@ public static class ServicesBuilder
             });
         });
         web.AddValidation();
+
         return web;
     }
 }
