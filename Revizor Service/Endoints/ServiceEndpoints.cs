@@ -34,19 +34,19 @@ public static class ServiceEndpoints
             {
                 return Results.Unauthorized();
             }
-            if (hasher.VerifyHashedPassword(user,user.Password, dto.Password.ToString()) != PasswordVerificationResult.Success)
+            if (hasher.VerifyHashedPassword(user,user.Password, dto.Password) != PasswordVerificationResult.Success)
             {
                 return Results.Unauthorized();
             }
             
             var newRefresh = RefreshToken.GenerateRefreshToken();
-            var newRefreshHash =  Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(newRefresh)));
+            var newRefreshHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(newRefresh)));
 
             user.UpdateRefreshData(newRefreshHash, DateTime.UtcNow.AddDays(7));
 
             await db.SaveChangesAsync(ct);
             
-            httpContext.AppendCookiesInfo("refreshToken", user.RefreshToken!, (DateTime)user.RefreshExpireTime!);
+            httpContext.AppendCookiesInfo("refreshToken", newRefresh, (DateTime)user.RefreshExpireTime!);
 
             return Results.Ok(
                 ApiResponses<Token>.Ok(
@@ -77,13 +77,12 @@ public static class ServiceEndpoints
             }
 
             var newRefresh = RefreshToken.GenerateRefreshToken();
-            var newRefreshHash =  Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(newRefresh)));
+            var newRefreshHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(newRefresh)));
 
             user.UpdateRefreshData(newRefreshHash, DateTime.UtcNow.AddDays(7));
+            http.AppendCookiesInfo("refreshToken", newRefresh, (DateTime)user.RefreshExpireTime!);
 
             await db.SaveChangesAsync(ct);
-
-            http.AppendCookiesInfo("refreshToken", newRefresh , (DateTime)user.RefreshExpireTime);
             return Results.Ok(ApiResponses<Token>.Ok(new Token() {AccessToken = JWT.GenToken(user, cfg)}));
         });
 

@@ -18,7 +18,7 @@ public static class FacilityEndpoints
         group.MapGet("/", async (AppDbContext db, CancellationToken ct) => 
         {
             var res = await db.Facilities.AsNoTracking().ToArrayAsync(ct);
-            Results.Ok(ApiResponses<IEnumerable<Facility>>.Ok(res));
+            return Results.Ok(ApiResponses<IEnumerable<Facility>>.Ok(res));
         });
 
         group.MapPost("/", async (AppDbContext db, CreateFacility dto, CancellationToken ct) =>

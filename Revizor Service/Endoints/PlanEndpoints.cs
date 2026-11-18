@@ -16,7 +16,11 @@ public static class PlanEndpoints
         var group = app.MapGroup("/plan")
             .WithTags("Plan");
 
-        group.MapGet("/", async (AppDbContext db) => Results.Ok(ApiResponses<IEnumerable<Plan>>.Ok(await db.Plans.AsNoTracking().ToArrayAsync())))
+        group.MapGet("/", async (AppDbContext db) => 
+        {
+            var res = await db.Plans.AsNoTracking().ToArrayAsync();
+            return Results.Ok(ApiResponses<IEnumerable<Plan>>.Ok(res));
+        })
         .RequireAuthorization("admin");
 
         group.MapGet("/{planId}", async (AppDbContext db, Guid planId, CancellationToken ct) =>
