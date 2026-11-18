@@ -9,6 +9,10 @@ public static class ErrorHandler
 {
     public static (int Status, string Message, ExceptionCode Code) GetError(Exception? ex)
     {
+        if (ex is UnauthorizedAccessException)
+        {
+            return (401, ex.Message, ExceptionCode.Unauthorized);
+        }
         if (ex is BadHttpRequestException )
         {
             return (400, "Невалидный формат данных", ExceptionCode.ValidationError);

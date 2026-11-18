@@ -32,7 +32,7 @@ public class PlanAssigment
         PassById = dto.PassById; ResponsiblePersonId = dto.ResponsiblePersonId;
     }
 
-    public static List<PlanAssigment> CreateMany(Guid planId, IEnumerable<MultipleAssigment> dtos) 
+    public static List<PlanAssigment> CreateMany(Guid planId, List<MultipleAssigment> dtos) 
     {
         ArgumentNullException.ThrowIfNull(dtos);
         return dtos.Select(dto => new PlanAssigment(planId, dto)).ToList();
