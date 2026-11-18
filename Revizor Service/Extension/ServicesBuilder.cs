@@ -13,13 +13,12 @@ namespace Revizor_Service.Extension;
 
 public static class ServicesBuilder
 {
-    public static IServiceCollection RegisterServices (this WebApplicationBuilder builder)
+    public static void RegisterServices (this WebApplicationBuilder builder)
     {
-        var web = builder.Services;
-        
-        web.AddOpenApi();
-        web.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(builder.Configuration.GetConnectionString("revizor")));
-        web.AddSwaggerGen(opt =>
+
+        builder.Services.AddOpenApi();
+        builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(builder.Configuration.GetConnectionString("revizor")));
+        builder.Services.AddSwaggerGen(opt =>
         {
             opt.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
@@ -35,7 +34,7 @@ public static class ServicesBuilder
                 [new OpenApiSecuritySchemeReference("Bearer",doc)] =[] 
             });
         });
-        web.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(opt =>
+        builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(opt =>
         {
             opt.TokenValidationParameters = new TokenValidationParameters
             {
@@ -49,15 +48,15 @@ public static class ServicesBuilder
                 ClockSkew = TimeSpan.Zero
             };
         });
-        web.AddAuthorization(opt =>
+        builder.Services.AddAuthorization(opt =>
         {
             opt.AddPolicy("admin",p => p.RequireRole("admin"));
             opt.AddPolicy("revizor", p=> p.RequireRole("revizor"));
         });
-        web.AddScoped<IPasswordHasher<CreateUser>, PasswordHasher<CreateUser>>();
-        web.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
-        web.AddScoped<ReportsServices>();
-        web.AddCors(options =>
+        builder.Services.AddScoped<IPasswordHasher<CreateUser>, PasswordHasher<CreateUser>>();
+        builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+        builder.Services.AddScoped<ReportsServices>();
+        builder.Services.AddCors(options =>
         {
             options.AddPolicy("AllowFrontend", policy =>
             {
@@ -68,8 +67,6 @@ public static class ServicesBuilder
                     .WithExposedHeaders("Content-Disposition");
             });
         });
-        web.AddValidation();
-
-        return web;
+        builder.Services.AddValidation();
     }
 }

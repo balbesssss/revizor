@@ -5,7 +5,7 @@ namespace Revizor_Service.Extension;
 
 public static class MiddleWare
 {
-    public static IApplicationBuilder RegisterMiddleWare (this WebApplication AppBuilder)
+    public static void RegisterMiddleWare (this WebApplication AppBuilder)
     {
         var app = AppBuilder;
         app.UseExceptionHandler(errorApp =>
@@ -26,9 +26,7 @@ public static class MiddleWare
         app.MapOpenApi();
         app.UseHttpsRedirection();
         app.UseAuthentication();
-        app.UseAuthorization();        
-
-        return AppBuilder;
+        app.UseAuthorization();
     }
 
 }
