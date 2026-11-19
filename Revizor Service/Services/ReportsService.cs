@@ -3,14 +3,16 @@ using ClosedXML.Excel;
 using Revizor_Service.Database.Models;
 using Microsoft.EntityFrameworkCore;
 using Revizor_Service.Responses;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Revizor_Service.Services;
-public class ReportsServices(IConfiguration cfg, AppDbContext db)
+public class ReportsServices(IConfiguration cfg, AppDbContext db, IMemoryCache cache)
 {
     private readonly string _folderReports = cfg["folderReports"]!;
     private readonly AppDbContext _db = db;
+    private readonly IMemoryCache _cache = cache;
 
-    public async Task<List<DataReportWithRecords>> GetRecordsByPlan(Guid planId, CancellationToken ct)
+    private async Task<Dictionary<string, List<RecordItem>>> GetRecordsByPlanFromDB (Guid planId, CancellationToken ct)
     {
         var plan = await _db.Plans.FirstOrDefaultAsync(p=> p.Id == planId,ct);
         if (plan == null) return [];
@@ -47,7 +49,19 @@ public class ReportsServices(IConfiguration cfg, AppDbContext db)
                     };
                 }).ToList()
             })
-            .ToList();
+            .ToDictionary(p=> p.FullName, p=> p.Resords);
+        return result;
+    }
+
+    public async Task<Dictionary<string, List<RecordItem>>> GetRecordsByPlan(Guid planId, CancellationToken ct)
+    {
+        var key = $"records_by_plan_{planId}";
+        if (_cache.TryGetValue(key,out Dictionary<string, List<RecordItem>>? cached) && cached is not null)
+        {
+            return cached;
+        }
+        var result = await GetRecordsByPlanFromDB(planId, ct);
+        _cache.Set(key,result, TimeSpan.FromHours(24));
         return result;
     }
     
@@ -85,29 +99,29 @@ public class ReportsServices(IConfiguration cfg, AppDbContext db)
         var currentDate = DateTime.Now;
         var records = await GetRecordsByPlan(planId, ct);
         if (records.Count == 0) return 0;
-        foreach (var user in records)
+        foreach (var pair in records)
         {
-            var worksheet = workbook.Worksheets.Add($"{user.FullName}");
+            var worksheet = workbook.Worksheets.Add($"{pair.Key}");
             worksheet.Cell("A1").Value = currentDate.ToString("dd.MM.yyyy");
 
             worksheet.Range("A2:G2").Merge();
-            worksheet.Cell("A2").Value = user.FullName.ToString();
+            worksheet.Cell("A2").Value = pair.Key.ToString();
             worksheet.Cell("A3").Value = "Наименование объекта";
             worksheet.Cell("B3").Value = "Время";
             worksheet.Cell("C3").Value = "Общее";
             worksheet.Cell("D3").Value = "Ночные";
             worksheet.Cell("E3").Value = "Проезд";
 
-            for (var i = 0; i < user.Resords.Count; i++)
+            for (var i = 0; i < pair.Value.Count; i++)
             {
-                worksheet.Cell($"A{i + 4}").Value = $"{user.Resords[i].FacilityTitle} {user.Resords[i].FacilityLocation}";
-                worksheet.Cell($"B{i + 4}").Value = $"{user.Resords[i].StartAt.ToString("HH:mm:ss")} - {user.Resords[i].EndAt.ToString("HH:mm:ss")}";
-                worksheet.Cell($"C{i + 4}").Value = (user.Resords[i].EndAt.ToTimeSpan() - user.Resords[i].StartAt.ToTimeSpan()).ToString(@"hh\:mm\:ss");
-                var startAt = user.Resords[i].StartAt;
-                var endAt = user.Resords[i].EndAt;
+                worksheet.Cell($"A{i + 4}").Value = $"{pair.Value[i].FacilityTitle} {pair.Value[i].FacilityLocation}";
+                worksheet.Cell($"B{i + 4}").Value = $"{pair.Value[i].StartAt.ToString("HH:mm:ss")} - {pair.Value[i].EndAt.ToString("HH:mm:ss")}";
+                worksheet.Cell($"C{i + 4}").Value = (pair.Value[i].EndAt.ToTimeSpan() - pair.Value[i].StartAt.ToTimeSpan()).ToString(@"hh\:mm\:ss");
+                var startAt = pair.Value[i].StartAt;
+                var endAt = pair.Value[i].EndAt;
 
                 worksheet.Cell($"D{i + 4}").Value = GetNightHours(startAt, endAt);
-                worksheet.Cell($"E{i + 4}").Value = user.Resords[i].PassegeWay;
+                worksheet.Cell($"E{i + 4}").Value = pair.Value[i].PassegeWay;
             }
         }
         _db.Reports.Add(new Report
@@ -121,42 +135,46 @@ public class ReportsServices(IConfiguration cfg, AppDbContext db)
         return 1;
     }   
 
-    public async Task<int> CreateDocumentReportUser(Guid reportId, string userName)
+    public async Task<int> CreateDocumentReportUser(Guid reportId, string userName, CancellationToken ct)
     {
-        // using (var workbook = new XLWorkbook())
-        // {
-        //     var currentDate = DateTime.Now;
-        //     var worksheet = workbook.AddWorksheet(" ");
-        //     var report = await _db.Reports.FirstOrDefaultAsync(r=> r.Id == reportId);
-            
-        //     if (report == null) return 0;
-        //     var records = await _db.Records.Where(r=> r.PlanId == report.PlanId).ToArrayAsync();
+        using var workbook = new XLWorkbook();
+        var currentDate = DateTime.Now;
+        var worksheet = workbook.AddWorksheet(" ");
 
-        //     worksheet.Range("A2:G2").Merge();
-        //     worksheet.Cell("A2").Value =  userName;
-        //     worksheet.Cell("A3").Value = "Дата";
-        //     worksheet.Cell("B3").Value = "Наименование объекта";
-        //     worksheet.Cell("C3").Value = "Время";
-        //     worksheet.Cell("D3").Value = "Общее";
-        //     worksheet.Cell("E3").Value = "Ночные";
-        //     worksheet.Cell("F3").Value = "Проезд";
-        //     for (int i = 0 ;i<records.Length; i++)
-        //     {
-        //         worksheet.Cell($"A{i+4}").Value = records[i].CreatedAt.ToString("dd.MM.yyyy HH:mm:ss");
-        //         worksheet.Cell($"B{i+4}").Value = $"{records[i].Facility.Title} {records[i].Facility.Location}";
-        //         worksheet.Cell($"C{i+4}").Value = $"{records[i].StartAt.ToString("HH:mm:ss")} - {records[i].EndAt.ToString("HH:mm:ss")}";
-        //         worksheet.Cell($"D{i+4}").Value = (records[i].EndAt.ToTimeSpan() - records[i].StartAt.ToTimeSpan()).ToString(@"hh\:mm\:ss");
-                
-        //         var startAt = records[i].StartAt;
-        //         var endAt = records[i].EndAt;
+        var report = await _db.Reports.FirstOrDefaultAsync(r => r.Id == reportId);
+        if (report == null) return 0;
 
-        //         worksheet.Cell($"E{i+4}").Value = GetNightHours(startAt,endAt);
-        //         worksheet.Cell($"F{i+4}").Value = records[i].PassageWay;
-        //     }
-            
-        //     workbook.SaveAs($"{_folderReports}/Revizor/{currentDate.Month}_{currentDate.Year}.xlsx");
-        //     return 1;
-        // }
+        var key = $"records_by_plan_{report.PlanId}";
+
+        Dictionary<string, List<RecordItem>> allRecords = [];
+        
+        allRecords = await GetRecordsByPlan(report.PlanId, ct);
+        
+        if (!allRecords.TryGetValue(userName,out var recordUser) || recordUser is null) 
+            return 0;
+        
+        worksheet.Range("A2:G2").Merge();
+        worksheet.Cell("A2").Value = userName;
+        worksheet.Cell("A3").Value = "Дата";
+        worksheet.Cell("B3").Value = "Наименование объекта";
+        worksheet.Cell("C3").Value = "Время";
+        worksheet.Cell("D3").Value = "Общее";
+        worksheet.Cell("E3").Value = "Ночные";
+        worksheet.Cell("F3").Value = "Проезд";
+        for (int i = 0; i < recordUser.Count; i++)
+        {
+            worksheet.Cell($"A{i + 4}").Value = recordUser[i].CreatedAt.ToString("dd.MM.yyyy HH:mm:ss");
+            worksheet.Cell($"B{i + 4}").Value = $"{recordUser[i].FacilityTitle} {recordUser[i].FacilityLocation}";
+            worksheet.Cell($"C{i + 4}").Value = $"{recordUser[i].StartAt.ToString("HH:mm:ss")} - {recordUser[i].EndAt.ToString("HH:mm:ss")}";
+            worksheet.Cell($"D{i + 4}").Value = (recordUser[i].EndAt.ToTimeSpan() - recordUser[i].StartAt.ToTimeSpan()).ToString(@"hh\:mm\:ss");
+
+            var startAt = recordUser[i].StartAt;
+            var endAt = recordUser[i].EndAt;
+
+            worksheet.Cell($"E{i + 4}").Value = GetNightHours(startAt, endAt);
+            worksheet.Cell($"F{i + 4}").Value = recordUser[i].PassegeWay;
+        }
+        workbook.SaveAs($"{_folderReports}/Revizor/{currentDate.Month}_{currentDate.Year}.xlsx");
         return 1;
     }
 }

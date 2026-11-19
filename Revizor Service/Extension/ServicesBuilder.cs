@@ -68,5 +68,6 @@ public static class ServicesBuilder
             });
         });
         builder.Services.AddValidation();
+        builder.Services.AddMemoryCache();
     }
 }
