@@ -28,7 +28,7 @@ function RolePage() {
       const res = apiFetch(`http://localhost:5196/roles/${id}`, { 
       method: 'DELETE'
     });
-    if ((await res).status !== 200 ) {
+    if ((await res).status !== 204 ) {
       alert ("Нельзя удалить запись")
       return;
     }

@@ -77,23 +77,34 @@ public static class PlanEndpoints
                     .Include(r=> r.PassBy)
                     .Include(r=> r.ResponsiblePerson)
                     .ToListAsync(ct);
-                var results = assigments.GroupBy(a=> a.Facility).Select(g=> new AssigmentItem
-                {
-                    Id = g.Select(p=> p.Id).First(),
-                    FacilityId = g.Key.Id,
-                    FacilityTitle = g.Key.Title,
-                    FacilityLocation = g.Key.Location,
-                    PassAt = g.Select(u=> u.PassAt).FirstOrDefault(),
-                    Revizors = g.Select(u=> new UserShort {
-                        Id = u.PassById,
-                        FullName = u.PassBy!.GetFullName(),
-                        }).ToList(),
-                    ResponsiblePerson = g.Select(r => new UserShort
+                var results = assigments
+                    .GroupBy(a => a.FacilityId)
+                    .Select(g =>
                     {
-                        Id = (Guid)r.ResponsiblePersonId!,
-                        FullName = r.ResponsiblePerson!.GetFullName()
-                    }).FirstOrDefault(),
-                }).ToList();
+                        var first = g.First();
+                        return new AssigmentItem
+                        {
+                            Id = first.Id,
+                            FacilityId = g.Key,
+                            FacilityTitle = first.Facility!.Title,
+                            FacilityLocation = first.Facility!.Location,
+                            PassAt = g.Select(u => u.PassAt).FirstOrDefault(),
+                            Revizors = g.Select(u => new UserShort
+                            {
+                                Id = u.PassById,
+                                FullName = u.PassBy!.GetFullName()
+                            }).ToList(),
+                            ResponsiblePerson = g
+                                .Where(r => r.ResponsiblePersonId != null && r.ResponsiblePerson != null)
+                                .Select(r => new UserShort
+                                {
+                                    Id = r.ResponsiblePersonId!.Value,
+                                    FullName = r.ResponsiblePerson!.GetFullName()
+                                })
+                                .FirstOrDefault()
+                        };
+                    })
+                    .ToList();
                 return Results.Ok(ApiResponses<DataCurrentPlanOfAssigment>.Ok(new () {NamePlan = currentPlan.Name, Assigments=results}));
             }
             if (claims.FindFirstValue(ClaimTypes.Role) == "revizor")

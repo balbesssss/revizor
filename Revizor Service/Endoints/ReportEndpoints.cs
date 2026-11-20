@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Revizor_Service.Database;
-using Revizor_Service.Database.Models;
 using Revizor_Service.Extension;
 using Revizor_Service.Responses;
 using Revizor_Service.Services;
@@ -26,19 +25,12 @@ public static class ReportEndpoints
         })
         .RequireAuthorization("admin");
 
-        group.MapGet("/my", async (AppDbContext db, Guid reportId, ClaimsPrincipal claims, CancellationToken ct) =>
-        {
-            var userId = claims.UserFromClaims();
-            var reports = await db.Reports.Where(r=> r.UserId == userId).ToArrayAsync(ct);
-            return Results.Ok(ApiResponses<IEnumerable<Report>>.Ok(reports));
-        })
-        .RequireAuthorization(policy => policy.RequireRole("admin","revizor"));
-
         group.MapGet("/", async (AppDbContext db, CancellationToken ct) =>
         {
             var results = await db.Reports
                 .AsNoTracking()
                 .Select(p=> new DataReportToFront {
+                    Id = p.Id,
                     PlanId = p.Plan!.Id,
                     Name = p.Plan.Name,
                     PeriodStart = p.Plan.PeriodStart,
@@ -46,12 +38,12 @@ public static class ReportEndpoints
                     }).ToArrayAsync(ct);
             return Results.Ok(ApiResponses<IEnumerable<DataReportToFront>>.Ok(results));
         })
-        .RequireAuthorization("admin");
+        .RequireAuthorization(p=> p.RequireRole("admin", "revizor"));
 
         group.MapGet("/{planId}" , async (AppDbContext db, ReportsServices reportsServices, Guid planId, CancellationToken ct) =>
         { 
             var result = await reportsServices.GetRecordsByPlan(planId, ct);
-            return Results.Ok(ApiResponses<IEnumerable<DataReportWithRecords>>.Ok(result));
+            return Results.Ok(ApiResponses<Dictionary<string, List<RecordItem>>>.Ok(result));
         })
         .RequireAuthorization("admin");
 

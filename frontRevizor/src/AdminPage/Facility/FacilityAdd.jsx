@@ -14,7 +14,7 @@ import { apiFetch } from '../../api';
       alert("Обьект не может быть пустой")
       return ;
     }
-    const res = await apiFetch(`http://localhost:5196/facilities/`, {
+    const res = await apiFetch(`http://localhost:5196/facility/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({title,location })

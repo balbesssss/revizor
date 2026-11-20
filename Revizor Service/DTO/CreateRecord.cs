@@ -6,7 +6,7 @@ public record CreateRecord
 (
     Guid PlanAssigmentId,
     TimeOnly EndAt,
-
+    Guid? UserId,
     [Range(0, float.MaxValue)]
     float PassageWay
 );

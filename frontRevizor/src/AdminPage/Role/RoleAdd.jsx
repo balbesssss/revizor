@@ -12,7 +12,7 @@ import { apiFetch } from '../../api';
       alert("роль не может быть пустой")
       return ;
     }
-    const res = await apiFetch(`http://localhost:5196/roles/`, {
+    const res = await apiFetch(`http://localhost:5196/roles`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name })

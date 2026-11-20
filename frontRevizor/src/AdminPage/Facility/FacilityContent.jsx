@@ -12,12 +12,12 @@ function FacilityContent () {
     const [edit, setEdit] = useState(false)
 
     useEffect(() => {
-      apiFetch("http://localhost:5196/facilities", {
+      apiFetch("http://localhost:5196/facility", {
         headers: {'Authorization' : `Bearer ${localStorage.getItem('token')}`}
       }).then(res=> res.json()).then(data=> {setFacility(data.data),setLoading(false)})},[])
 
     const handleAddSave = async () => {
-        const res = await apiFetch('http://localhost:5196/facilities');
+        const res = await apiFetch('http://localhost:5196/facility');
         const data = await res.json();
         setFacility(data.data);
         setIsAdd(false);
@@ -25,7 +25,7 @@ function FacilityContent () {
     
     const handleDelete = async () => {
         if (!confirm('Удалить объект?')) { setSelectedFacility(null); return }
-        apiFetch(`http://localhost:5196/facilities/${selectedFacility.id}`,
+        apiFetch(`http://localhost:5196/facility/${selectedFacility.id}`,
             {
                 method: "DELETE"
             }

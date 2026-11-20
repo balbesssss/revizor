@@ -9,7 +9,7 @@ function EditFacility({ facility, onClose, onSave }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    const res = await apiFetch(`http://localhost:5196/facilities/${facility.id}`, {
+    const res = await apiFetch(`http://localhost:5196/facility/${facility.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, location})

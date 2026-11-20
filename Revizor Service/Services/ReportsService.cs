@@ -25,6 +25,7 @@ public class ReportsServices(IConfiguration cfg, AppDbContext db, IMemoryCache c
 
         var records = await _db.Records
             .Where(r => r.PlanAssigment.PlanId == planId)
+            .Include(r=> r.PlanAssigment)
             .ToListAsync(ct);
 
         var result = assignments
@@ -97,6 +98,8 @@ public class ReportsServices(IConfiguration cfg, AppDbContext db, IMemoryCache c
     {
         using var workbook = new XLWorkbook();
         var currentDate = DateTime.Now;
+        var plan = await _db.Plans.AsNoTracking().FirstOrDefaultAsync(p => p.Id == planId, ct);
+        if (plan is null) return 0;
         var records = await GetRecordsByPlan(planId, ct);
         if (records.Count == 0) return 0;
         foreach (var pair in records)
@@ -114,19 +117,25 @@ public class ReportsServices(IConfiguration cfg, AppDbContext db, IMemoryCache c
 
             for (var i = 0; i < pair.Value.Count; i++)
             {
-                worksheet.Cell($"A{i + 4}").Value = $"{pair.Value[i].FacilityTitle} {pair.Value[i].FacilityLocation}";
-                worksheet.Cell($"B{i + 4}").Value = $"{pair.Value[i].StartAt.ToString("HH:mm:ss")} - {pair.Value[i].EndAt.ToString("HH:mm:ss")}";
-                worksheet.Cell($"C{i + 4}").Value = (pair.Value[i].EndAt.ToTimeSpan() - pair.Value[i].StartAt.ToTimeSpan()).ToString(@"hh\:mm\:ss");
                 var startAt = pair.Value[i].StartAt;
                 var endAt = pair.Value[i].EndAt;
 
+                var startTs = startAt.ToTimeSpan();
+                var endTs = endAt.ToTimeSpan();
+                if (endTs < startTs) endTs = endTs.Add(TimeSpan.FromHours(24));
+
+                var total = endTs - startTs;
+                var totalFormatted = $"{(int)total.TotalHours}:{total.Minutes:D2}:{total.Seconds:D2}";
+                worksheet.Cell($"A{i + 4}").Value = $"{pair.Value[i].FacilityTitle} {pair.Value[i].FacilityLocation}";
+                worksheet.Cell($"B{i + 4}").Value = $"{startAt.ToString("HH:mm:ss")} - {endAt.ToString("HH:mm:ss")}";
+                worksheet.Cell($"C{i + 4}").Value = totalFormatted;
                 worksheet.Cell($"D{i + 4}").Value = GetNightHours(startAt, endAt);
                 worksheet.Cell($"E{i + 4}").Value = pair.Value[i].PassegeWay;
             }
         }
         _db.Reports.Add(new Report
         (
-            planId, admin.Id,
+            admin.Id, planId, 
             $"user_{admin.GetFullName()}",
             $"{_folderReports}/Revizor/"
         ));

@@ -19,20 +19,20 @@ public class PlanAssigment
     public PlanAssigment
     (
         Guid planId, Guid facilityId, DateTime passAt,
-        Guid passById, Guid responsiblePersonId
+        Guid passById, Guid? responsiblePersonId = null
     )
     {
         PlanId = planId; FacilityId = facilityId; PassAt = passAt; 
         PassById = passById; ResponsiblePersonId = responsiblePersonId;
     }
 
-    public PlanAssigment (Guid planId, MultipleAssigment dto )
+    public PlanAssigment (Guid planId, CreateAssigment dto )
     {
         PlanId = planId; FacilityId = dto.FacilityId; PassAt = dto.PassAt; 
         PassById = dto.PassById; ResponsiblePersonId = dto.ResponsiblePersonId;
     }
 
-    public static List<PlanAssigment> CreateMany(Guid planId, List<MultipleAssigment> dtos) 
+    public static List<PlanAssigment> CreateMany(Guid planId, List<CreateAssigment> dtos) 
     {
         ArgumentNullException.ThrowIfNull(dtos);
         return dtos.Select(dto => new PlanAssigment(planId, dto)).ToList();

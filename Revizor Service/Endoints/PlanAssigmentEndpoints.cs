@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Revizor_Service.Database;
+using Revizor_Service.Database.Models;
 using Revizor_Service.DTO;
 using Revizor_Service.Extension;
 using Revizor_Service.Responses;
@@ -19,28 +20,32 @@ public static class PlanAssigmentEndpoints
         group.MapGet("/{planId}" , async (AppDbContext db, Guid planId, CancellationToken ct) =>
         {
             var assigments = await db.PlanAssigments
-                .AsNoTracking()
+                .AsNoTrackingWithIdentityResolution()
                 .Where(p=> p.PlanId == planId)
                 .Include(p=> p.PassBy)
                 .Include(p=> p.ResponsiblePerson)
                 .Include(p=> p.Facility)
                 .ToArrayAsync(ct);
+
             var result = assigments.GroupBy(p=> p.Facility)
                 .Select(r=> new DataPlanOfAssigment
                 {
                     Facility = $"{r.Key.Title} {r.Key.Location}",
-                    PassAt = r.Select(p=> p.PassAt).First(),
-                    Revizors = r.Select(r=> new UserShort
+                    PassAt = r.Select(p=> p.PassAt).FirstOrDefault(),
+                    Revizors = r.Select(rev=> new UserShort
                     {
-                        Id = r.PassById,
-                        FullName = r.PassBy!.GetFullName()
+                        Id = rev.PassById,
+                        FullName = rev.PassBy!.GetFullName()
                     }).ToList(),
-                    ResponsiblePerson = r.Select(p=> new UserShort
-                    {
-                        Id = (Guid)p.ResponsiblePersonId!,
-                        FullName = p.ResponsiblePerson!.GetFullName()
-                    }).First()
-                }).ToArray();
+                    ResponsiblePerson = r
+                        .Where(a => a.ResponsiblePersonId is not null)
+                        .Select(rp=> new UserShort
+                        {
+                            Id = rp.ResponsiblePersonId!.Value,
+                            FullName = rp.ResponsiblePerson!.GetFullName()
+                        })
+                        .First()
+                }).ToList();
             return Results.Ok(ApiResponses<IEnumerable<DataPlanOfAssigment>>.Ok(result)) ;
         });
 
@@ -55,15 +60,11 @@ public static class PlanAssigmentEndpoints
 
             foreach (var assigment in dtos)
             {
-                db.PlanAssigments.Add(new (
-                    plan.Id,
-                    assigment.PassById,
-                    assigment.PassAt,
-                    assigment.FacilityId,
-                    assigment.ResponsiblePersonId));
+                var objectAssigment = new PlanAssigment(planId, assigment);
+                db.PlanAssigments.Add(objectAssigment);
             }
             await db.SaveChangesAsync(ct);
-            return Results.Ok(ApiResponses.Ok("Plan Assigments create")); 
+            return Results.Ok(ApiResponses.Ok("Plan Assigments created")); 
         });
 
         return app;

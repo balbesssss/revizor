@@ -1,4 +1,3 @@
-/* Контейнер на весь экран для центрирования */
 .login-container {
   display: flex;
   justify-content: center;
@@ -8,7 +7,7 @@
   font-family: var(--sans);
 }
 
-/* Сама карточка входа */
+
 .login-card {
   background: var(--bg);
   padding: 40px;
@@ -17,7 +16,7 @@
   border: 1px solid var(--border);
   width: 100%;
   max-width: 400px;
-  text-align: left; /* Выравниваем текст по левому краю для аккуратности */
+  text-align: left; 
 }
 
 .login-title {

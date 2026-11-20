@@ -3,7 +3,8 @@ import styles from '../Role/RolePage.module.css';
 import { apiFetch } from '../../api';
 
 function MainContent() {
-  const [plan, setPlan] = useState(null);
+  const [plan, setPlan] = useState([]);
+  const [loading, setLoading] = useState(true);
   const token = localStorage.getItem('token');
 
   useEffect(() => {
@@ -12,10 +13,12 @@ function MainContent() {
       headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(res => res.json())
-      .then(data => setPlan(data.data));
+      .then(data => setPlan(data.data || []))
+      .finally(() => setLoading(false));;
   }, []);
 
-  if (!plan) return <h1>Загрузка...</h1>;
+  if (loading) return <h1>Загрузка...</h1>;
+  if (plan == []) return <h1>Активного плана нет</h1>;
   
   return (
     <div>

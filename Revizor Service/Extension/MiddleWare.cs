@@ -28,5 +28,4 @@ public static class MiddleWare
         app.UseAuthentication();
         app.UseAuthorization();
     }
-
 }

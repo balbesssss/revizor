@@ -129,5 +129,4 @@ public static class ServiceEndpoints
         
         return app;
     }
-    
 }

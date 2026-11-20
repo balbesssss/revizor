@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import RolePage from './RolePage';
+import RolePage from './Role/RolePage';
 import styles from './AdminPage.module.css';
-import MainContent from './MainContent';
-import UserContent from './UserContent';
-import FacilityContent from './FacilityContent';
-import ReportContent from './ReportsContent';
-import PlanContent from './PlanContent';
+import MainContent from './Main/MainContent';
+import UserContent from './User/UserContent';
+import FacilityContent from './Facility/FacilityContent';
+import ReportContent from './Report/ReportsContent';
+import PlanContent from './Plan/PlanContent';
 
 function AdminPage() {
   const [activeTab, setActiveTab] = useState('main');

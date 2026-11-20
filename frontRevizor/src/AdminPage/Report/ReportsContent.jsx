@@ -15,7 +15,7 @@ function ReportContent() {
   }, []);
 
   useEffect(() => {
-    apiFetch('http://localhost:5196/get-reports')
+    apiFetch('http://localhost:5196/reports')
       .then(res => res.json())
       .then(data => setReport(data.data || []))
       .catch(err => console.error(err));
@@ -23,7 +23,7 @@ function ReportContent() {
 
 
   async function downloadReport(planId) {
-    const res = await apiFetch(`http://localhost:5196/download-report/${planId}`);
+    const res = await apiFetch(`http://localhost:5196/reports/${planId}/download`);
     
     if (!res.ok) throw new Error('Ошибка скачивания');
     
@@ -49,13 +49,13 @@ function ReportContent() {
 
   async function generateReport(planId) {
     try {
-      const res = await apiFetch(`http://localhost:5196/generate-reports/${planId}`, {
+      const res = await apiFetch(`http://localhost:5196/reports/${planId}/generate`, {
         method: 'GET'
       });
       
       if (!res.ok) throw new Error('Ошибка генерации');
       
-      const reportsRes = await apiFetch('http://localhost:5196/get-reports');
+      const reportsRes = await apiFetch('http://localhost:5196/reports');
       const data = await reportsRes.json();
       setReport(data.data || []);
       
@@ -84,7 +84,7 @@ function ReportContent() {
               {plan.length === 0 ? (
                 <p className={styles.empty}>Нет планов</p>
               ) : (
-                plan.map(p => (
+                report.map(p => (
                   <button
                     key={p.id}
                     className={styles.menuItem}
@@ -107,7 +107,7 @@ function ReportContent() {
             <button
               key={element.planId}
               className={styles.button}
-              onClick={() => downloadReport(element.planId)}
+              onClick={() => downloadReport(element.id)}
             >
               {element.name}
             </button>

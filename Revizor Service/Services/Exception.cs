@@ -14,5 +14,6 @@ public enum ExceptionCode
     NotNullViolation,
     Unauthorized,
     Forbidden,
-    InternalError
+    InternalError,
+    BadRequest
 }

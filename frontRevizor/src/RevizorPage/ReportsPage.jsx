@@ -15,25 +15,19 @@ function ReportsPage() {
 
   useEffect(() => {
     let cancelled = false;
-
-    const url = `${API_BASE}/get-reports/my?reportId=00000000-0000-0000-0000-000000000000`;
-
-    apiFetch(url, { method: 'GET' })
-      .then((res) => {
+    apiFetch(`${API_BASE}/reports/`, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    })
+      .then(res => {
         if (!res.ok) throw new Error(`Ошибка ${res.status}`);
         return res.json();
       })
-      .then((body) => {
-        if (cancelled) return;
-        const list = Array.isArray(body?.data) ? body.data : [];
-        setReports(list);
+      .then(body => {
+        if (!cancelled) setReports(Array.isArray(body?.data) ? body.data : []);
       })
-      .catch((err) => {
-        if (!cancelled) setError(err.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      .catch(err => !cancelled && setError(err.message))
+      .finally(() => !cancelled && setLoading(false));
 
     return () => { cancelled = true; };
   }, []);
@@ -42,8 +36,9 @@ function ReportsPage() {
     setError(null);
     setDownloadingId(report.id);
     try {
-      const res = await apiFetch(`${API_BASE}/download-report/${report.id}`, {
+      const res = await apiFetch(`${API_BASE}/reports/${report.id}/download`, {
         method: 'GET',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
       });
 
       if (!res.ok) {
@@ -53,12 +48,11 @@ function ReportsPage() {
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-
       const disposition = res.headers.get('Content-Disposition') || '';
       const match = disposition.match(/filename\*?=(?:UTF-8''|")?([^";]+)/i);
       const filename = match
         ? decodeURIComponent(match[1].replace(/"/g, ''))
-        : report.fileName || `report_${report.id}.xlsx`;
+        : `${report.name}_${report.periodStart}.xlsx`;
 
       const a = document.createElement('a');
       a.href = url;
@@ -98,10 +92,11 @@ function ReportsPage() {
                 onClick={() => handleDownload(r)}
                 disabled={downloadingId === r.id}
                 style={{ animationDelay: `${index * 0.05}s` }}
-                title={r.fileName || r.id}
+                title={`${r.name} (${r.periodStart} — ${r.periodEnd})`}
               >
-                <span className={styles.cardTitle}>
-                  {r.fileName || `Отчёт ${r.id.slice(0, 8)}`}
+                <span className={styles.cardTitle}>{r.name}</span>
+                <span className={styles.cardStatus}>
+                  {r.periodStart} — {r.periodEnd}
                 </span>
                 <span className={styles.cardStatus}>
                   {downloadingId === r.id ? 'Скачивание…' : 'Скачать'}

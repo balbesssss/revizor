@@ -16,7 +16,7 @@ function LoginPage() {
     setError('');
 
     try {
-      const res = await fetch('http://localhost:5196/login', {
+      const res = await fetch('http://localhost:5196/service/login', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -28,7 +28,7 @@ function LoginPage() {
       const data = await res.json();
       const token = data.data.accessToken;
       localStorage.setItem('token', token);
-      await fetch('http://localhost:5196/users/me', {
+      await fetch('http://localhost:5196/service/users/me', {
         method: 'GET',
         credentials: 'include',
         headers: { 'Authorization': `Bearer ${token}` },
@@ -39,9 +39,10 @@ function LoginPage() {
 
       if (userInfo.Role.toLowerCase() === 'admin') {
         navigate('/admin');
-      } else {
+      } else if (userInfo.Role.toLowerCase() === 'revizor') {
         navigate('/revizor');
       }
+      else {throw new Error("aasd")}
     } catch (err) {
       setError(err.message);
     }
@@ -102,6 +103,7 @@ function getUserFromCookie() {
   if (!match) return null;
   const base64 = match.split('=')[1];
   try {
+    console.log(JSON.parse(atob(base64)))
     return JSON.parse(atob(base64));
   } catch {
     return null;

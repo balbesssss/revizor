@@ -1,4 +1,4 @@
-namespace Revizor_Service.DTO;
+namespace Revizor_Service.Responses;
 
 public class DataPlanOfAssigment
 {

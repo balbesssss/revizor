@@ -117,9 +117,6 @@ namespace Revizor_Service.Migrations
                     b.Property<Guid?>("ResponsiblePersonId")
                         .HasColumnType("uuid");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
                     b.HasKey("Id");
 
                     b.HasIndex("FacilityId");
@@ -143,7 +140,7 @@ namespace Revizor_Service.Migrations
                     b.Property<TimeOnly>("EndAt")
                         .HasColumnType("time without time zone");
 
-                    b.Property<float?>("PassageWay")
+                    b.Property<float>("PassageWay")
                         .HasColumnType("real");
 
                     b.Property<Guid>("PlanAssigmentId")

@@ -1,4 +1,4 @@
-namespace Revizor_Service.Database.Models;
+namespace Revizor_Service.Responses;
 
 public class Token
 {
