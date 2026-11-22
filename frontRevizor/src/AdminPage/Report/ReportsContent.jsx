@@ -84,7 +84,7 @@ function ReportContent() {
               {plan.length === 0 ? (
                 <p className={styles.empty}>Нет планов</p>
               ) : (
-                report.map(p => (
+                plan.map(p => (
                   <button
                     key={p.id}
                     className={styles.menuItem}

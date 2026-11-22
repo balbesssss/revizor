@@ -44,7 +44,7 @@ public static class PlanAssigmentEndpoints
                             Id = rp.ResponsiblePersonId!.Value,
                             FullName = rp.ResponsiblePerson!.GetFullName()
                         })
-                        .First()
+                        .FirstOrDefault()
                 }).ToList();
             return Results.Ok(ApiResponses<IEnumerable<DataPlanOfAssigment>>.Ok(result)) ;
         });

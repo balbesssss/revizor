@@ -39,7 +39,7 @@ function UserAddModal({ user, roles = [], onSave, onClose }) {
             : 'http://localhost:5196/users';
 
         const res = await apiFetch(url, {
-            method: isEdit ? 'PUT' : 'POST',
+            method: isEdit ? 'PATCH' : 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${localStorage.getItem('token')}`

@@ -26,7 +26,7 @@ function MainContent() {
         <h2>План на {plan.namePlan}</h2>
       </div>
 
-      {plan.assigments.length === 0 ? (
+      {plan.assigments?.length === 0 || !plan.assigments ? (
         <h1>Plan is empty</h1>
       ) : (
         <table className={styles.table}>
