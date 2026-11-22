@@ -1,5 +1,3 @@
-using Revizor_Service.DTO;
-
 namespace Revizor_Service.Responses;
 
 public class DataCurrentPlanOfAssigment

@@ -70,7 +70,7 @@ public static class ReportEndpoints
                 fileDownloadName: $"{report.Plan.PeriodStart.Month}_{report.Plan.PeriodStart.Year}.xlsx"
             );
         })
-        .RequireAuthorization("admin");
+        .RequireAuthorization(p=> p.RequireRole("admin", "revizor"));
 
         return app;
     }

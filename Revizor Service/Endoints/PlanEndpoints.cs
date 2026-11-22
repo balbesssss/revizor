@@ -67,8 +67,9 @@ public static class PlanEndpoints
             if (currentPlan == null) return Results.Ok(ApiResponses.Ok("current plan is empty"));
 
             var userId = claims.UserFromClaims();
+            var role = claims.FindFirstValue(ClaimTypes.Role);
 
-            if (claims.FindFirstValue(ClaimTypes.Role) == "admin")
+            if (role == "admin")
             {
                 var assigments = await db.PlanAssigments
                     .AsNoTracking()
@@ -107,7 +108,7 @@ public static class PlanEndpoints
                     .ToList();
                 return Results.Ok(ApiResponses<DataCurrentPlanOfAssigment>.Ok(new () {NamePlan = currentPlan.Name, Assigments=results}));
             }
-            if (claims.FindFirstValue(ClaimTypes.Role) == "revizor")
+            if (role == "revizor")
             {
                 var assigments = await db.PlanAssigments
                     .AsNoTracking()

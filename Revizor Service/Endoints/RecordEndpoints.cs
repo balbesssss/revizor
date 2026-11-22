@@ -38,8 +38,8 @@ public static class RecordEndpoints
             var assigment = await db.PlanAssigments.FirstOrDefaultAsync(p=> p.Id == dto.PlanAssigmentId && p.PassById == targetUserId, ct);
             if (assigment == null) return Results.NotFound(ApiResponses.Fail("assigment not found",ExceptionCode.NotFound));
             
-            if (assigment is null)
-                return Results.NotFound(ApiResponses.Fail("assignment not found", ExceptionCode.NotFound));
+            var existRecord = await db.Records.FirstOrDefaultAsync(e=> e.PlanAssigmentId == assigment.Id, ct);
+            if (existRecord != null) return Results.Conflict("record already existing");
 
             var record = new Record (
                 assigment.Id,
